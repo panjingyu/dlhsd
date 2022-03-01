@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 import random as rd
 import copy
-import pandas as pd 
+import pandas as pd
 os.environ["CUDA_VISIBLE_DEVICES"] = str(sys.argv[2])
 '''
 Initialize Path and Global Params
@@ -51,20 +51,33 @@ if validation == 1:
 #ata_list, label_list = get_data(train_list)
 #dct_kernel = get_dct_kernel(imgdim//blockdim, fealen)
 
+cure_h = .1
+cure_l = .1
+
 x_data = tf.placeholder(tf.float32, shape=[None, blockdim*blockdim, fealen])              #input FT
 x  = tf.reshape(x_data, [-1, blockdim, blockdim, fealen])
-y_gt   = tf.placeholder(tf.float32, shape=[None, 2])                                      #ground truth label
-                                     #ground truth label without bias
-                        #reshap to NHWC
-if aug==0:
-    predict= forward(x)                                                        #do forward
-else:
-    predict= forward(x, aug=True)
-loss   = tf.nn.softmax_cross_entropy_with_logits(labels=y_gt, logits=predict) 
-loss   = tf.reduce_mean(loss)                                                             #calc batch loss
-                                                          #calc batch loss without bias
-y      = tf.cast(tf.argmax(predict, 1), tf.int32)                                         
-accu   = tf.equal(y, tf.cast(tf.argmax(y_gt, 1), tf.int32))                                                    #calc batch accu
+if aug:
+    x = tf.map_fn(lambda img: tf.image.random_flip_left_right(img), x)
+    x = tf.map_fn(lambda img: tf.image.random_flip_up_down(img), x)
+y_gt   = tf.placeholder(tf.float32, shape=[None, 2]) #ground truth label
+#ground truth label without bias
+#reshap to NHWC
+predict = forward(x)
+loss   = tf.nn.softmax_cross_entropy_with_logits(labels=y_gt, logits=predict)
+loss   = tf.reduce_mean(loss) #calc batch loss
+weights = tf.trainable_variables()
+x_grad = tf.gradients(loss, x)
+x_grad_r = tf.reshape(x_grad, shape=(-1, blockdim * blockdim * fealen))
+n = tf.norm(x_grad_r, axis=1)
+n = tf.expand_dims(n, axis=1)
+z = tf.reshape(tf.sign(x_grad_r) / (n + 1e-7), shape=(-1, blockdim, blockdim, fealen))
+predict_z = forward(x + cure_h * z)
+loss_z = tf.nn.softmax_cross_entropy_with_logits(labels=y_gt, logits=predict_z)
+loss_z = tf.reduce_mean(loss_z)
+loss = loss + cure_l * loss_z
+#calc batch loss without bias
+y      = tf.cast(tf.argmax(predict, 1), tf.int32)
+accu   = tf.equal(y, tf.cast(tf.argmax(y_gt, 1), tf.int32)) #calc batch accu
 accu   = tf.reduce_mean(tf.cast(accu, tf.float32))
 gs     = tf.Variable(initial_value=0, trainable=False, dtype=tf.int32)       #define global step
 #lr     = tf.train.exponential_decay(0.001, gs, decay_steps=20000, decay_rate = 0.65, staircase = True) #initial learning rate and lr decay
@@ -117,7 +130,7 @@ with tf.Session(config=config) as sess:
             if validation==1:
                 acc_val.append([step,accu.eval(feed_dict={x_data:valid_data.ft_buffer, y_gt:processlabel(valid_data.label_buffer)})])
                 print("Validation Accuracy is %g"%acc_val[-1][1])
-            
+
         #if step % d_step == 0 and step >0:
         #    lr = lr * dr
 if validation==1:

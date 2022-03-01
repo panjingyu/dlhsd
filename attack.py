@@ -1,4 +1,5 @@
 # from scipy.misc import imread
+from xml.parsers.expat import model
 from imageio import imread
 import cv2
 import numpy as np
@@ -67,8 +68,11 @@ def _generate_sraf_add(img, vias, srafs, insert_shape=[40,90], save_img=False, s
     min_dis_to_vias = 100
     max_dis_to_vias = 500
     min_dis_to_sraf = 60
-    black_img_ = cv2.imread("black.png", 0)
+    # black_img_ = cv2.imread("black.png", 0)
+    img_size = 2048
+    black_img_ = np.zeros(shape=(img_size, img_size), dtype=np.uint8)
     black_img = np.copy(black_img_)
+    cv2.imwrite('black.png', black_img)
     for item in vias:
         center = [item[0]+int(item[2]/2), item[1]+int(item[3]/2)]
         black_img[max(0, center[0]-max_dis_to_vias):min(black_img.shape[0], center[0]+max_dis_to_vias), max(0, center[1]-max_dis_to_vias):min(black_img.shape[1], center[1]+max_dis_to_vias)] = 255
@@ -333,6 +337,8 @@ def attack(target_idx):
     ckpt = tf.train.get_checkpoint_state(model_path)
     if ckpt and ckpt.model_checkpoint_path:
         ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+    else:
+        raise RuntimeError(model_path + ' is not existed!')
 
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())

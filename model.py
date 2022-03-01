@@ -1,14 +1,11 @@
 import os
-import string
 import numpy as np
 from itertools import islice
 import random
 import csv
 
 from scipy.misc import imread
-from time import time
-import json
-import pandas as pd 
+import pandas as pd
 import math
 from PIL import Image
 from scipy.fftpack import dct
@@ -79,7 +76,11 @@ def cutblock(img, block_size, block_dim):
 
 # Generate DCT from image
 def feature(img, block_size, block_dim, fealen):
+    # print(img.shape)
+    # exit()
     img=rescale(img)
+    # print(img.shape)
+    # exit()
     feaarray = np.empty(fealen*block_dim*block_dim).reshape(fealen, block_dim, block_dim)
     blocked = cutblock(img, block_size, block_dim)
     for i in range(0, block_dim):
@@ -111,7 +112,7 @@ def feature_mp(imgs):
         target: the directory that stores the csv files
         fealen: the length of feature tensor, related to to discarded DCT coefficients
     returns: (1) numpy array of feature tensors with shape: N x H x W x C
-             (2) numpy array of labels with shape: N x 1 
+             (2) numpy array of labels with shape: N x 1
 '''
 def readcsv_(target, fealen=32):
     #read label
@@ -130,7 +131,7 @@ def readcsv_(target, fealen=32):
                 file = '/ac'+str(i)+'.csv'
                 path = target + file
                 featemp = np.genfromtxt(path, delimiter=',')
-                feature.append(featemp)          
+                feature.append(featemp)
     return np.rollaxis(np.asarray(feature), 0, 3)[:,:,0:fealen], label
 def readcsv(target, fealen=32):
     #read label
@@ -149,8 +150,8 @@ def readcsv(target, fealen=32):
                 file = '/ac'+str(i)+'.csv'
                 path = target + file
                 featemp = pd.read_csv(path, header=None).values
-                feature.append(featemp)  
-            print(np.asarray(featemp).shape)        
+                feature.append(featemp)
+            print(np.asarray(featemp).shape)
     return np.rollaxis(np.asarray(feature), 0, 3)[:,:,0:fealen], label
 
 
@@ -161,7 +162,7 @@ def writecsv(target, data, label, fealen):
     for i in range(0, fealen):
         if i == 0:
             path = target + '/dc.csv'
-            np.savetxt(path, 
+            np.savetxt(path,
                 data[:,i,:],
                 fmt='%d',
                 delimiter=',',          # column delimiter
@@ -239,7 +240,7 @@ def get_data(train_file_list):
     for i in range(datalen):
         datalist.append(train_file_list[i].split()[0])
         labellist.append(int(train_file_list[i].split()[1]))
-    
+
     return np.array(datalist), np.array(labellist)
 
 
@@ -286,7 +287,7 @@ def get_dct_kernel(block_size, fealen):
                             kernel[x,y,c]=math.cos(math.pi/block_size*(x+0.5)*i)*math.cos(math.pi/block_size*(y+0.5)*j)
                     c+=1
 
-    
+
     print("dct_kernel_size is ", kernel.shape)
     return np.expand_dims(kernel, axis = 2)
 
@@ -297,7 +298,7 @@ try:
     import tensorflow as tf
     import tensorflow.contrib.slim as slim
 
-
+    tf.logging.set_verbosity(tf.logging.ERROR)
 
     def forward_dct(input, is_training=True, reuse=tf.AUTO_REUSE, scope='model'):
 
@@ -357,12 +358,12 @@ try:
 
 
     #dct input
-    def forward(input, is_training=True, reuse=tf.AUTO_REUSE, scope='model', aug = False):
-        if aug == True:
-            input = tf.map_fn(lambda img: tf.image.random_flip_left_right(img), input)
-            input = tf.map_fn(lambda img: tf.image.random_flip_up_down(img), input)
+    def forward(input, is_training=True, reuse=tf.AUTO_REUSE, scope='model'):
         with tf.variable_scope(scope, reuse=reuse):
-            with slim.arg_scope([slim.conv2d], activation_fn=tf.nn.relu, stride=1, padding='SAME',
+            with slim.arg_scope([slim.conv2d],
+                                activation_fn=tf.nn.relu,
+                                stride=1,
+                                padding='SAME',
                                 weights_initializer=tf.contrib.layers.xavier_initializer(uniform=False),
                                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -386,7 +387,7 @@ try:
 
     '''
         data: a class to handle the training and testing data, implement minibatch fetch
-        args: 
+        args:
             fea: feature tensor of whole data set
             lab: labels of whole data set
             ptr: a pointer for the current location of minibatch
@@ -395,7 +396,7 @@ try:
         methods:
             nextinstance():  returns a single instance and its label from the training set, used for SGD
             nextbatch(): returns a batch of instances and their labels from the training set, used for MGD
-                args: 
+                args:
                     batch: minibatch number
                     channel: the channel length of feature tersor, lenth > channel will be discarded
                     delta1, delta2: see process_label
@@ -451,7 +452,7 @@ try:
                             with open(path) as f:
                                 r=csv.reader(f)
                                 fea=[[int(s) for s in row] for j,row in enumerate(r) if j==idx]
-                                temp_fea.append(np.asarray(fea))        
+                                temp_fea.append(np.asarray(fea))
             with open(self.label) as l:
                 temp_label=np.asarray(list(l)[idx]).astype(int)
                 if temp_label==0:
@@ -606,7 +607,7 @@ try:
                                 temp_fea.append(np.genfromtxt(islice(f, self.ptr, self.ptr+batch),delimiter=','))
                 self.ptr=self.ptr+batch
             elif (self.ptr+batch) >= self.maxlen:
-                
+
                 #processing labels
                 with open(self.label) as l:
                     a=np.genfromtxt(islice(l, self.ptr, self.maxlen),delimiter=',')
