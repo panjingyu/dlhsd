@@ -8,7 +8,6 @@ import configparser as cp
 import sys
 import time
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = str(sys.argv[2])
 debug = False
 
 def get_image_from_input_id(test_file_list, id):
@@ -139,15 +138,63 @@ def generate_adversarial_image(img, X, alpha):
     alpha = alpha.astype(np.int32)
     return (img+np.sum(X*np.expand_dims(alpha,-1),axis=0)).astype(np.uint8)
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', type=str, default='dct_config.ini')
+parser.add_argument('--cure-l', type=str, default=None)
+parser.add_argument('--cure-h', type=str, default=None)
+parser.add_argument('--save-path', type=str, default=None)
+parser.add_argument('--aug', action='store_true')
+args = parser.parse_args()
+
+log_file = 'attack'
+if args.aug:
+    log_file += '.aug'
+if args.cure_l is not None and args.cure_h is not None:
+    log_file += '.cureL{}H{}'.format(args.cure_l, args.cure_h)
+if args.save_path is not None:
+    model_path = args.save_path
+else:
+    model_path = 'models/' + 'vias' + log_file[6:] + '/'
+log_file += '.log'
+
+class StreamToLogger(object):
+    """
+    Fake file-like stream object that redirects writes to a logger instance.
+    """
+    def __init__(self, logger, level):
+       self.logger = logger
+       self.level = level
+       self.linebuf = ''
+
+    def write(self, buf):
+       for line in buf.rstrip().splitlines():
+          self.logger.log(self.level, line.rstrip())
+
+    def flush(self):
+        pass
+
+import logging
+logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s:%(levelname)s:%(message)s',
+        filename=log_file,
+        filemode='a'
+        )
+log = logging.getLogger('')
+sys.stdout = StreamToLogger(log,logging.INFO)
+sys.stderr = StreamToLogger(log,logging.ERROR)
+
+
 '''
 Initialize Path and Global Params
 '''
 infile = cp.SafeConfigParser()
-infile.read(sys.argv[1])
+infile.read(args.config)
 
 test_path   = infile.get('dir','test_path_txt')
 test_list = open(test_path).readlines()
-model_path = infile.get('dir','model_path')
+# model_path = infile.get('dir','model_path')
 fealen     = int(infile.get('feature','ft_length'))
 blockdim   = int(infile.get('feature','block_dim'))
 blocksize   = int(infile.get('feature','block_size'))
@@ -158,7 +205,8 @@ _max_candidates = int(infile.get('attack', 'max_candidates'))
 max_perturbation = int(infile.get('attack', 'max_perturbation'))
 alpha_threshold = float(infile.get('attack', 'alpha_threshold'))
 attack_path = infile.get('attack', 'attack_path_txt')
-img_save_dir = 'dct/attack_'+str(_max_candidates)+'_'+str(max_iter)+'/'
+img_save_dir = 'dct/attack_'+log_file[6:-4]+str(_max_candidates)+'_'+str(max_iter)+'/'
+os.makedirs(img_save_dir, exist_ok=True)
 
 '''
 Prepare the Input

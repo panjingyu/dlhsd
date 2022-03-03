@@ -1,30 +1,82 @@
 from model import *
-try:
-    import ConfigParser as cp
-except:
-    import configparser as cp
+import configparser as cp
 import sys
 import os
 from datetime import datetime
-import random as rd
-import copy
 import pandas as pd
-os.environ["CUDA_VISIBLE_DEVICES"] = str(sys.argv[2])
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', type=str, default='via_config.ini')
+parser.add_argument('--cure-l', type=str, default=None)
+parser.add_argument('--cure-h', type=str, default=None)
+parser.add_argument('--save-path', type=str, default=None)
+parser.add_argument('--aug', action='store_true')
+args = parser.parse_args()
+
+aug = args.aug
+
+log_file = 'train'
+if aug:
+    log_file += '.aug'
+if args.cure_l is not None and args.cure_h is not None:
+    log_file += '.cureL{}H{}'.format(args.cure_l, args.cure_h)
+    cure_h = float(args.cure_h)
+    cure_l = float(args.cure_l)
+else:
+    cure_h, cure_l = 0, 0
+
+if args.save_path is not None:
+    save_path = args.save_path
+else:
+    save_path = 'models/' + 'vias' + log_file[5:] + '/'
+log_file += '.log'
+
 '''
 Initialize Path and Global Params
 '''
 infile = cp.SafeConfigParser()
-infile.read(sys.argv[1])
+infile.read(args.config)
 train_path = infile.get('dir','train_path')
 
-save_path = infile.get('dir','save_path')
 fealen     = int(infile.get('feature','ft_length'))
 blockdim   = int(infile.get('feature','block_dim'))
 imgdim = int(infile.get('feature','img_dim'))
 val_num = int(infile.get('train','val_num'))
 delta = float(infile.get('train','delta'))
-aug  = int(infile.get('train','aug'))
 validation  = int(infile.get('train','validation'))
+
+
+class StreamToLogger(object):
+    """
+    Fake file-like stream object that redirects writes to a logger instance.
+    """
+    def __init__(self, logger, level):
+       self.logger = logger
+       self.level = level
+       self.linebuf = ''
+
+    def write(self, buf):
+       for line in buf.rstrip().splitlines():
+          self.logger.log(self.level, line.rstrip())
+
+    def flush(self):
+        pass
+
+import logging
+logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s:%(levelname)s:%(message)s',
+        filename=log_file,
+        filemode='a'
+        )
+log = logging.getLogger('')
+sys.stdout = StreamToLogger(log,logging.INFO)
+sys.stderr = StreamToLogger(log,logging.ERROR)
+
+print(args)
+print('AUG={}, CURE_L={}, CURE_H={}'.format(aug, cure_l, cure_h))
+print('model dir = {}'.format(save_path))
 '''
 Prepare the Optimizer
 '''
@@ -47,12 +99,6 @@ if validation == 1:
     train_data.reset()
     train_data.stat()
 
-#train_list = open(train_path).readlines()
-#ata_list, label_list = get_data(train_list)
-#dct_kernel = get_dct_kernel(imgdim//blockdim, fealen)
-
-cure_h = .1
-cure_l = .1
 
 x_data = tf.placeholder(tf.float32, shape=[None, blockdim*blockdim, fealen])              #input FT
 x  = tf.reshape(x_data, [-1, blockdim, blockdim, fealen])
