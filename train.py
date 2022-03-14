@@ -29,7 +29,7 @@ else:
 if args.save_path is not None:
     save_path = args.save_path
 else:
-    save_path = 'models/' + 'vias' + log_file[5:] + '/'
+    save_path = 'models/vias/' + log_file[5:] + '/'
 log_file += '.log'
 
 '''
@@ -46,33 +46,18 @@ val_num = int(infile.get('train','val_num'))
 delta = float(infile.get('train','delta'))
 validation  = int(infile.get('train','validation'))
 
-
-class StreamToLogger(object):
-    """
-    Fake file-like stream object that redirects writes to a logger instance.
-    """
-    def __init__(self, logger, level):
-       self.logger = logger
-       self.level = level
-       self.linebuf = ''
-
-    def write(self, buf):
-       for line in buf.rstrip().splitlines():
-          self.logger.log(self.level, line.rstrip())
-
-    def flush(self):
-        pass
-
 import logging
+from log_helper import StreamToLogger
+
 logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s:%(levelname)s:%(message)s',
-        filename=log_file,
-        filemode='a'
-        )
+    level=logging.DEBUG,
+    format='%(asctime)s:%(levelname)s:%(message)s',
+    filename=log_file,
+    filemode='a'
+    )
 log = logging.getLogger('')
-sys.stdout = StreamToLogger(log,logging.INFO)
-sys.stderr = StreamToLogger(log,logging.ERROR)
+sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
+sys.stderr = StreamToLogger(log,logging.ERROR, sys.stderr)
 
 print(args)
 print('AUG={}, CURE_L={}, CURE_H={}'.format(aug, cure_l, cure_h))
