@@ -407,9 +407,8 @@ def attack(target_idx):
     # generate candidates
     X = generate_candidates(test_list, target_idx)
     np.random.shuffle(X)
-    if max_candidates > X.shape[0]:
-        max_candidates = X.shape[0]
-    X = X[:max_candidates]
+    if max_candidates < X.shape[0]:
+        X = X[:max_candidates]
     t_X = tf.placeholder(dtype=tf.float32, shape=[max_candidates, imgdim, imgdim])
 
     alpha = -10.0 + np.zeros((max_candidates,1))
