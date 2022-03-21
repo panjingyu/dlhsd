@@ -3,6 +3,6 @@ models
 dct
 dct-rd-40-90
 dct-40-90
-.env/
+.env*/
 .vscode/
 *.pyc
