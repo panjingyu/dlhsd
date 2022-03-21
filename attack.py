@@ -10,6 +10,8 @@ import time
 import os
 debug = False
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 def get_image_from_input_id(test_file_list, id):
     '''
     return a image and its label
@@ -145,9 +147,12 @@ parser.add_argument('--cure-l', type=str, default=None)
 parser.add_argument('--cure-h', type=str, default=None)
 parser.add_argument('--save-path', type=str, default=None)
 parser.add_argument('--aug', action='store_true')
+parser.add_argument('--log', type=str, default=None)
+parser.add_argument('--id', type=int, required=True, choices=[1, 2, 3, 4])
 args = parser.parse_args()
 
-log_file = 'attack'
+log_file = 'attack_{}'.format(args.id)
+pre_len = len(log_file)
 if args.aug:
     log_file += '.aug'
 if args.cure_l is not None and args.cure_h is not None:
@@ -155,26 +160,16 @@ if args.cure_l is not None and args.cure_h is not None:
 if args.save_path is not None:
     model_path = args.save_path
 else:
-    model_path = 'models/' + 'vias' + log_file[6:] + '/'
+    model_path = 'models/' + 'vias' + log_file[pre_len:] + '/'
 log_file += '.log'
 
-class StreamToLogger(object):
-    """
-    Fake file-like stream object that redirects writes to a logger instance.
-    """
-    def __init__(self, logger, level):
-       self.logger = logger
-       self.level = level
-       self.linebuf = ''
+if args.log is not None:
+    log_file = args.log + '.log'
 
-    def write(self, buf):
-       for line in buf.rstrip().splitlines():
-          self.logger.log(self.level, line.rstrip())
 
-    def flush(self):
-        pass
-
+from log_helper import StreamToLogger
 import logging
+
 logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s:%(levelname)s:%(message)s',
@@ -182,8 +177,8 @@ logging.basicConfig(
         filemode='a'
         )
 log = logging.getLogger('')
-sys.stdout = StreamToLogger(log,logging.INFO)
-sys.stderr = StreamToLogger(log,logging.ERROR)
+sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
+sys.stderr = StreamToLogger(log,logging.ERROR, sys.stderr)
 
 
 '''
@@ -192,7 +187,7 @@ Initialize Path and Global Params
 infile = cp.SafeConfigParser()
 infile.read(args.config)
 
-test_path   = infile.get('dir','test_path_txt')
+test_path   = infile.get('dir','test_path_txt_{}'.format(args.id))
 test_list = open(test_path).readlines()
 # model_path = infile.get('dir','model_path')
 fealen     = int(infile.get('feature','ft_length'))
@@ -205,7 +200,7 @@ _max_candidates = int(infile.get('attack', 'max_candidates'))
 max_perturbation = int(infile.get('attack', 'max_perturbation'))
 alpha_threshold = float(infile.get('attack', 'alpha_threshold'))
 attack_path = infile.get('attack', 'attack_path_txt')
-img_save_dir = 'dct/attack_'+log_file[6:-4]+str(_max_candidates)+'_'+str(max_iter)+'/'
+img_save_dir = 'dct/attack_'+log_file[pre_len:-4]+str(_max_candidates)+'_'+str(max_iter)+'/'
 os.makedirs(img_save_dir, exist_ok=True)
 
 '''
@@ -409,6 +404,8 @@ def attack(target_idx):
     np.random.shuffle(X)
     if max_candidates < X.shape[0]:
         X = X[:max_candidates]
+    else:
+        max_candidates = X.shape[0]
     t_X = tf.placeholder(dtype=tf.float32, shape=[max_candidates, imgdim, imgdim])
 
     alpha = -10.0 + np.zeros((max_candidates,1))
@@ -462,21 +459,15 @@ def attack(target_idx):
                 diff = fwd.eval(feed_dict={input_placeholder: input_images, t_X: X})
                 if debug:
                     print("****************")
-                    print("alpha:")
-                    print(a)
-
-                    print("lambda:")
-                    print(t_la.eval())
-
-                    print("fwd:")
-                    print(diff)
-
-                    print("loss_1:")
-                    print(loss_1.eval(feed_dict={input_placeholder:
-input_images, t_X: X}))
-
-                    print("loss:")
-                    print(loss.eval(feed_dict={input_placeholder: input_images, t_X: X}))
+                    print("alpha:", a)
+                    print("lambda:", t_la.eval())
+                    print("fwd:", diff)
+                    print("loss_1:",
+                          loss_1.eval(feed_dict={
+                              input_placeholder: input_images,
+                              t_X: X}))
+                    print("loss:",
+                          loss.eval(feed_dict={input_placeholder: input_images, t_X: X}))
 
                 if diff < -0.0:
                     interval = 5

@@ -34,6 +34,22 @@ else:
     save_path = 'models/vias' + log_file[pre_len:] + '/'
 log_file += '.log'
 
+import logging
+from log_helper import StreamToLogger
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s:%(levelname)s:%(message)s',
+    filename=log_file,
+    filemode='a'
+    )
+log = logging.getLogger('')
+sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
+
+print(args)
+print('AUG={}, CURE_L={}, CURE_H={}'.format(args.aug, cure_l, cure_h))
+print('model dir = {}'.format(save_path))
+
 '''
 Initialize Path and Global Params
 '''

@@ -5,13 +5,16 @@ import os
 from datetime import datetime
 import pandas as pd
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default='via_config.ini')
+parser.add_argument('--config', type=str, default='config/via_config.ini')
 parser.add_argument('--cure-l', type=str, default=None)
 parser.add_argument('--cure-h', type=str, default=None)
 parser.add_argument('--save-path', type=str, default=None)
 parser.add_argument('--aug', action='store_true')
+parser.add_argument('--log', type=None, default=None)
 args = parser.parse_args()
 
 aug = args.aug
@@ -30,7 +33,10 @@ if args.save_path is not None:
     save_path = args.save_path
 else:
     save_path = 'models/vias/' + log_file[5:] + '/'
+if args.log is not None:
+    log_file = args.log
 log_file += '.log'
+log_file = os.path.join('log', log_file)
 
 '''
 Initialize Path and Global Params
