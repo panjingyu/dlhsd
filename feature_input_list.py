@@ -3,9 +3,7 @@ import model as f
 import numpy as np
 import os
 import sys
-import time
-from progress.bar import Bar
-import multiprocessing as mtp 
+import multiprocessing as mtp
 
 global imgSrc
 imgSrc='/research/byu2/hgeng/metric-learning/vias/test'
