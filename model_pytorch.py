@@ -2,6 +2,7 @@
 
 
 import torch.nn as nn
+from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip
 
 def _conv3x3(in_channels, out_channels, stride=1, dilation=1) -> nn.Conv2d:
     """3x3 convolution with 'same' padding of zeros."""
@@ -10,8 +11,11 @@ def _conv3x3(in_channels, out_channels, stride=1, dilation=1) -> nn.Conv2d:
                      stride=stride, dilation=dilation, bias=True)
 
 class DlhsdNetAfterDCT(nn.Module):
-    def __init__(self, block_dim, ft_length):
+    def __init__(self, block_dim, ft_length, aug=False):
         super().__init__()
+        self.aug = aug
+        self.random_horizontal_flip = RandomHorizontalFlip()
+        self.random_vertical_flip = RandomVerticalFlip()
         self.conv1_1 = nn.Sequential(
             _conv3x3(ft_length, 16),
             nn.ReLU(inplace=True),
@@ -43,6 +47,9 @@ class DlhsdNetAfterDCT(nn.Module):
         self.initialize_weights()
 
     def forward(self, x):
+        if self.aug:
+            x = self.random_horizontal_flip(x)
+            x = self.random_vertical_flip(x)
         out = self.conv1_1(x)
         out = self.conv1_2(out)
         out = self.pool1(out)
@@ -67,7 +74,7 @@ class DlhsdNetAfterDCT(nn.Module):
 
 if __name__ == '__main__':
     import torch
-    net = DlhsdNetAfterDCT(block_dim=16, ft_length=32)
+    net = DlhsdNetAfterDCT(block_dim=16, ft_length=32, aug=True)
     x = torch.randn((1, 32, 16, 16))
     out = net(x)
     print(out)
