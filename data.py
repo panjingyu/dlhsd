@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 from itertools import islice
+from tqdm import trange
 
 
 def readcsv(target, fealen=32):
@@ -13,7 +14,7 @@ def readcsv(target, fealen=32):
     #read feature
     feature = []
     for dirname, dirnames, filenames in os.walk(target):
-        for i in range(0, len(filenames)-1):
+        for i in trange(0, len(filenames)-1, desc='Loading data'):
             if i==0:
                 file = '/dc.csv'
                 path = target + file
@@ -24,7 +25,7 @@ def readcsv(target, fealen=32):
                 path = target + file
                 featemp = pd.read_csv(path, header=None).values
                 feature.append(featemp)
-            print(np.asarray(featemp).shape)
+            # print(np.asarray(featemp).shape)
     return np.rollaxis(np.asarray(feature), 0, 3)[:,:,0:fealen], label
 
 '''
