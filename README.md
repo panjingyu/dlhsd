@@ -36,6 +36,13 @@ set ```aug=0``` and
 
 use ```train.py``` if you want to see some results of the TCAD extension
 
+## Attack
+
+```bash
+python train.py
+python attack.py dct_config.ini <GPU_ID>
+```
+
 ## Updates
 
 -20190326: Transferred to Python 3.x (If you want python2 version please find at tag dlhsd-py2)

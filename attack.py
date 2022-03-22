@@ -73,7 +73,7 @@ def _generate_sraf_add(img, vias, srafs, insert_shape=[40,90], save_img=False, s
     img_size = 2048
     black_img_ = np.zeros(shape=(img_size, img_size), dtype=np.uint8)
     black_img = np.copy(black_img_)
-    cv2.imwrite('black.png', black_img)
+    # cv2.imwrite('black.png', black_img)
     for item in vias:
         center = [item[0]+int(item[2]/2), item[1]+int(item[3]/2)]
         black_img[max(0, center[0]-max_dis_to_vias):min(black_img.shape[0], center[0]+max_dis_to_vias), max(0, center[1]-max_dis_to_vias):min(black_img.shape[1], center[1]+max_dis_to_vias)] = 255
@@ -393,9 +393,12 @@ def attack(target_idx):
         v_input_images.append(np.rollaxis(fe, 0, 3))
         v_input_images = np.asarray(v_input_images)
         v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
-        if v_diff < -0.01:
-            print("misclassification")
-            return -1
+        if v_diff < -0.0:
+            print('misclassification: ' + str(target_idx))
+            # return -1
+            return 0
+        else:
+            return 1
 
     print("start attacking on id: "+str(target_idx))
     max_candidates = _max_candidates
@@ -533,6 +536,8 @@ def attack(target_idx):
 
 success = 0
 total = 0
+# print(len(idx[0]), max(idx[0]), min(idx[0]))
+# exit()
 for id in idx[0]:
     if id < 0:
         continue

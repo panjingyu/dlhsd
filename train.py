@@ -20,6 +20,7 @@ args = parser.parse_args()
 aug = args.aug
 
 log_file = 'train'
+log_prefix_len = len(log_file)
 if aug:
     log_file += '.aug'
 if args.cure_l is not None and args.cure_h is not None:
@@ -32,7 +33,7 @@ else:
 if args.save_path is not None:
     save_path = args.save_path
 else:
-    save_path = 'models/vias/' + log_file[5:] + '/'
+    save_path = 'models/vias/' + log_file[log_prefix_len+1:] + '/'
 if args.log is not None:
     log_file = args.log
 log_file += '.log'
@@ -157,6 +158,13 @@ with tf.Session(config=config) as sess:
         training_loss, learning_rate, training_acc = \
             loss.eval(feed_dict={x_data: batch_data, y_gt: batch_label_all_without_bias}), \
             lr, accu.eval(feed_dict={x_data:batch_data, y_gt:batch_label_all_without_bias})
+        # x_ = x.eval(feed_dict={x_data:batch_data, y_gt:batch_label_all_without_bias})
+        # # x_im = Image.fromarray()
+        # print(type(x_))
+        # print(x_.max())
+        # import code
+        # code.interact(local=locals())
+        # exit()
         opt.run(feed_dict={x_data: batch_data, y_gt: batch_label_all_with_bias, lr_holder: lr})
         if step % l_step == 0:
             format_str = ('%s: step %d, loss = %.2f, learning_rate = %f, training_accu = %f, nhs_loss = %.2f, bias = %.3f')

@@ -1,4 +1,4 @@
-./vias/test/Hvia56608_mb_mb_lccout.oas.gds.png      1     
+./vias/test/Hvia56608_mb_mb_lccout.oas.gds.png      1
 ./vias/test/Hvia59519_mb_mb_lccout.oas.gds.png      1
 ./vias/test/Hvia45310_mb_mb_lccout.oas.gds.png      1
 ./vias/test/Hvia34019_mb_mb_lccout.oas.gds.png      1

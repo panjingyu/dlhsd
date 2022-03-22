@@ -9,7 +9,7 @@ import cv2
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default='via_config.ini')
+parser.add_argument('--config', type=str, default='config/via_config.ini')
 parser.add_argument('--cure-l', type=str, default=None)
 parser.add_argument('--cure-h', type=str, default=None)
 parser.add_argument('--save-path', type=str, default=None)
@@ -31,7 +31,7 @@ else:
 if args.save_path is not None:
     save_path = args.save_path
 else:
-    save_path = 'models/vias' + log_file[pre_len:] + '/'
+    save_path = 'models/vias/' + log_file[pre_len+1:] + '/'
 log_file += '.log'
 
 import logging
