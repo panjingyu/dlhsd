@@ -44,7 +44,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s:%(levelname)s:%(message)s',
     filename=log_file,
-    filemode='a'
+    filemode='w'
     )
 log = logging.getLogger('')
 sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
@@ -75,6 +75,7 @@ bs = 512
 
 net = DlhsdNetAfterDCT(blockdim, fealen, aug=False).cuda()
 net.load_state_dict(torch.load(os.path.join(save_path, 'model-9999.pt')))
+net.eval()
 dct = DCT128x128('dct_filter.npy').cuda()
 dct.eval()
 
@@ -84,15 +85,16 @@ cnhs= 0   #correctly predicted nhs
 ahs = 0   #actual hs
 anhs= 0   #actual hs
 start   = time.time()
-for titr in trange(len(test_list), desc='Detecting ID {}'.format(args.id)):
-    tdata = cv2.imread(test_list[titr].split()[0],0)/255
-    tdata = np.reshape(tdata, [1, 1, 2048, 2048])
-    tdata = torch.from_numpy(tdata).float().cuda()
-    x_data = dct(tdata)
-    out = net(x_data)
-    predict = out.argmax(dim=1, keepdim=True)
-    chs += predict.item()
-    ahs += 1
+with torch.no_grad():
+    for titr in trange(len(test_list), desc='Detecting ID {}'.format(args.id)):
+        tdata = cv2.imread(test_list[titr].split()[0],0)/255
+        tdata = np.reshape(tdata, [1, 1, 2048, 2048])
+        tdata = torch.from_numpy(tdata).float().cuda()
+        x_data = dct(tdata)
+        out = net(x_data)
+        predict = out.argmax(dim=1, keepdim=True)
+        chs += predict.item()
+        ahs += 1
 
 if not ahs ==0:
     hs_accu = 1.0*chs/ahs

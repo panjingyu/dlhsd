@@ -1,6 +1,7 @@
 """Models of PyTorch version."""
 
 
+import torch
 import torch.nn as nn
 from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip
 
@@ -90,7 +91,6 @@ class DCT128x128(nn.Module):
         return self.kernel(x)
 
 if __name__ == '__main__':
-    import torch
     net = DlhsdNetAfterDCT(block_dim=16, ft_length=32, aug=True)
     x = torch.randn((1, 32, 16, 16))
     out = net(x)

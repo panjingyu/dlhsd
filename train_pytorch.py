@@ -12,7 +12,6 @@ import torch.optim as optim
 
 from model_pytorch import DlhsdNetAfterDCT
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -67,7 +66,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s:%(levelname)s:%(message)s',
     filename=log_file,
-    filemode='a'
+    filemode='w'
     )
 log = logging.getLogger('')
 
@@ -103,12 +102,13 @@ os.makedirs(save_path, exist_ok=True)
 lr = 1e-3
 net = DlhsdNetAfterDCT(blockdim, fealen, aug=aug).to('cuda')
 loss = nn.CrossEntropyLoss()
-opt = optim.Adam(net.parameters(), lr, betas=[.9, .999])
+opt = optim.Adam(net.parameters(), lr, betas=[.9, .999],
+                 amsgrad=True)
 
 maxitr = 10000
 bs     = 16  #training batch size
 
-l_step = 5    #display step
+l_step = 20   #display step
 c_step = 2000 #check point step
 d_step = 3000 #lr decay step
 ckpt   = True
@@ -146,23 +146,24 @@ for step in range(maxitr):
     batch_label_all_without_bias = processlabel(batch_label)
     batch_label_nhs_without_bias = processlabel(batch[3])
     # print(batch_nhs.shape, type(batch_nhs))
-    x_data = to_tensor(batch_nhs).cuda()
-    y_gt = torch.from_numpy(batch_label_nhs_without_bias).cuda()
-    net.eval()
-    net_out1 = net(x_data)
-    nhs_loss = loss(net_out1, y_gt)
-    # nhs_loss = loss.eval(feed_dict={x_data: batch_nhs, y_gt: batch_label_nhs_without_bias})
-    delta1 = loss_to_bias(nhs_loss.detach(), alpha=6)
-    batch_label_all_with_bias = processlabel(batch_label, delta1=delta1)
-    # print(batch_data.shape)
-    x_data = to_tensor(batch_data).cuda()
-    y_gt = torch.from_numpy(batch_label_all_without_bias).cuda()
-    net_out2 = net(x_data)
-    training_loss = loss(net_out2, y_gt)
-    learning_rate = lr
-    net_predict2 = net_out2.argmax(dim=1, keepdim=True)
-    correct = net_predict2.eq(y_gt.argmax(dim=1, keepdim=True)).cpu()
-    training_acc = correct.sum() / correct.numel()
+    with torch.no_grad():
+        x_data = to_tensor(batch_nhs).cuda()
+        y_gt = torch.from_numpy(batch_label_nhs_without_bias).cuda()
+        net.eval()
+        net_out1 = net(x_data)
+        nhs_loss = loss(net_out1, y_gt)
+        # nhs_loss = loss.eval(feed_dict={x_data: batch_nhs, y_gt: batch_label_nhs_without_bias})
+        delta1 = loss_to_bias(nhs_loss.detach(), alpha=6)
+        batch_label_all_with_bias = processlabel(batch_label, delta1=delta1)
+        # print(batch_data.shape)
+        x_data = to_tensor(batch_data).cuda()
+        y_gt = torch.from_numpy(batch_label_all_without_bias).cuda()
+        net_out2 = net(x_data)
+        training_loss = loss(net_out2, y_gt)
+        learning_rate = lr
+        net_predict2 = net_out2.argmax(dim=1, keepdim=True)
+        correct = net_predict2.eq(y_gt.argmax(dim=1, keepdim=True)).cpu()
+        training_acc = correct.sum() / correct.numel()
     y_gt = torch.from_numpy(batch_label_all_with_bias).cuda()
     net.train()
     opt.zero_grad()
@@ -177,16 +178,16 @@ for step in range(maxitr):
         path = save_path + 'model-'+str(step)+'.pt'
         torch.save(net.state_dict(), path)
         if validation==1:
-            x_data = to_tensor(valid_data.ft_buffer).cuda()
-            y_gt = torch.from_numpy(processlabel(valid_data.label_buffer)).cuda()
-            net.eval()
-            val_out = net(x_data)
-            val_predict = val_out.argmax(dim=1, keepdim=True)
-            correct = val_predict.eq(y_gt.argmax(dim=1, keepdim=True)).cpu()
-            acc_v = correct.sum() / correct.numel()
-            acc_val.append([step, acc_v])
-            # acc_val.append([step,accu.eval(feed_dict={x_data:valid_data.ft_buffer, y_gt:processlabel(valid_data.label_buffer)})])
-            print("Validation Accuracy is %g" % acc_v)
+            with torch.no_grad():
+                x_data = to_tensor(valid_data.ft_buffer).cuda()
+                y_gt = torch.from_numpy(processlabel(valid_data.label_buffer)).cuda()
+                net.eval()
+                val_out = net(x_data)
+                val_predict = val_out.argmax(dim=1, keepdim=True)
+                correct = val_predict.eq(y_gt.argmax(dim=1, keepdim=True)).cpu()
+                acc_v = correct.sum() / correct.numel()
+                acc_val.append([step, acc_v])
+                print("Validation Accuracy is %g" % acc_v)
 
 if validation==1:
     head = ['step', 'acc']
