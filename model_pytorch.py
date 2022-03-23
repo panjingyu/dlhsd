@@ -4,6 +4,9 @@
 import torch.nn as nn
 from torchvision.transforms import RandomHorizontalFlip, RandomVerticalFlip
 
+import numpy as np
+
+
 def _conv3x3(in_channels, out_channels, stride=1, dilation=1) -> nn.Conv2d:
     """3x3 convolution with 'same' padding of zeros."""
     padding = dilation  # (kernel_size // 2) + dilation - 1
@@ -72,9 +75,25 @@ class DlhsdNetAfterDCT(nn.Module):
                 self._initialize_layer(m)
 
 
+class DCT128x128(nn.Module):
+    def __init__(self, filter_path) -> None:
+        super().__init__()
+        w = np.expand_dims(np.load(filter_path), 1)
+        state = {'weight': torch.from_numpy(w).float()}
+        self.kernel = nn.Conv2d(
+            in_channels=1, out_channels=32, kernel_size=128, stride=128,
+            padding='valid', bias=False
+        )
+        self.kernel.load_state_dict(state)
+
+    def forward(self, x):
+        return self.kernel(x)
+
 if __name__ == '__main__':
     import torch
     net = DlhsdNetAfterDCT(block_dim=16, ft_length=32, aug=True)
     x = torch.randn((1, 32, 16, 16))
     out = net(x)
     print(out)
+    dct = DCT128x128('dct_filter.npy')
+    print(dct.kernel.state_dict())
