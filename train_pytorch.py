@@ -198,9 +198,12 @@ for step in range(maxitr):
                 correct = val_predict.eq(y_gt.argmax(dim=1, keepdim=True)).cpu()
                 acc_v = correct.sum() / correct.numel()
                 acc_val.append([step, acc_v])
+                tb_writer.add_scalar('validation_acc', acc_v, step)
                 print("Validation Accuracy is %g" % acc_v)
 
 if validation==1:
     head = ['step', 'acc']
     df = pd.DataFrame(acc_val, columns = head)
     df.to_csv(os.path.join(save_path,"cv.csv"))
+
+tb_writer.close()
