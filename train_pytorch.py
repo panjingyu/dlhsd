@@ -9,8 +9,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 from model_pytorch import DlhsdNetAfterDCT
+from cure import regularizer
 
 
 import argparse
@@ -45,10 +47,12 @@ if args.log is not None:
 log_file += '.log'
 log_file = os.path.join('log', log_file)
 
+tb_writer = SummaryWriter(log_dir=save_path)
+
 '''
 Initialize Path and Global Params
 '''
-infile = cp.SafeConfigParser()
+infile = cp.ConfigParser()
 infile.read(args.config)
 train_path = infile.get('dir','train_path')
 
@@ -113,18 +117,13 @@ c_step = 2000 #check point step
 d_step = 3000 #lr decay step
 ckpt   = True
 
-'''
-Start the training
-'''
-
-'''
-    loss_to_bias: calculate the bias term for batch biased learning
+def loss_to_bias(loss,  alpha, threshold=0.3):
+    ''' calculate the bias term for batch biased learning
     args:
         loss: the average loss of current batch with respect to the label without bias
         threshold: start biased learning when loss is below the threshold
     return: the bias value to calculate the gradient
-'''
-def loss_to_bias(loss,  alpha, threshold=0.3):
+    '''
     if loss >= threshold:
         bias = 0
     else:
@@ -132,9 +131,14 @@ def loss_to_bias(loss,  alpha, threshold=0.3):
     return bias
 
 def to_tensor(batch):
-    x_data = torch.from_numpy(batch.reshape(-1, blockdim, blockdim, fealen))
+    batch_size = batch.shape[0]
+    x_data = torch.from_numpy(batch.reshape(batch_size, blockdim, blockdim, fealen))
     x_data = x_data.permute([0, 3, 1, 2])   # NHWC -> NCHW
     return x_data.float()
+
+'''
+Start the training
+'''
 
 acc_val = []
 for step in range(maxitr):
@@ -167,13 +171,20 @@ for step in range(maxitr):
     y_gt = torch.from_numpy(batch_label_all_with_bias).cuda()
     net.train()
     opt.zero_grad()
+    reg, norm_grad = regularizer(net, x_data.detach(), y_gt, loss, h=cure_h, lambda_=cure_l)
     net_out = net(x_data)
     loss_ = loss(net_out, y_gt)
+    loss_ += reg
     loss_.backward()
     opt.step()
+    tb_writer.add_scalar('loss/all', training_loss, step)
+    tb_writer.add_scalar('training_acc', training_acc, step)
+    tb_writer.add_scalar('loss/nhs', nhs_loss, step)
+    tb_writer.add_scalar('bias', delta1, step)
+    tb_writer.add_scalar('norm_grad', norm_grad, step)
     if step % l_step == 0:
-        format_str = ('%s: step %d, loss = %.2f, learning_rate = %f, training_accu = %f, nhs_loss = %.2f, bias = %.3f')
-        print (format_str % (datetime.now(), step, training_loss, learning_rate, training_acc, nhs_loss, delta1))
+        format_str = ('%s: step %d, loss = %.2f, learning_rate = %f, training_accu = %f, nhs_loss = %.2f, bias = %.3f, norm_grad = %.3f')
+        print (format_str % (datetime.now(), step, training_loss, learning_rate, training_acc, nhs_loss, delta1, norm_grad))
     if step % c_step == 0 or step == maxitr-1:
         path = save_path + 'model-'+str(step)+'.pt'
         torch.save(net.state_dict(), path)
