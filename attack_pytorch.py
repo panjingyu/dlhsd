@@ -1,12 +1,14 @@
 import cv2
 import numpy as np
-from model import *
 import configparser as cp
 import sys
 import os
+
+import torch
+
+from model_pytorch import feature, DCT128x128, DlhsdNetAfterDCT
 debug = False
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def get_image_from_input_id(test_file_list, id):
     '''
@@ -138,7 +140,7 @@ def generate_adversarial_image(img, X, alpha):
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default='dct_config.ini')
+parser.add_argument('--config', type=str, default='config/dct_config.ini')
 parser.add_argument('--cure-l', type=str, default=None)
 parser.add_argument('--cure-h', type=str, default=None)
 parser.add_argument('--save-path', type=str, default=None)
@@ -156,7 +158,7 @@ if args.cure_l is not None and args.cure_h is not None:
 if args.save_path is not None:
     model_path = args.save_path
 else:
-    model_path = 'models/' + 'vias' + log_file[pre_len:] + '/'
+    model_path = 'models/vias/' + log_file[pre_len+1:] + '/'
 log_file += '.log'
 
 if args.log is not None:
@@ -180,7 +182,7 @@ sys.stderr = StreamToLogger(log,logging.ERROR, sys.stderr)
 '''
 Initialize Path and Global Params
 '''
-infile = cp.SafeConfigParser()
+infile = cp.ConfigParser()
 infile.read(args.config)
 
 test_path   = infile.get('dir','test_path_txt_{}'.format(args.id))
@@ -206,155 +208,14 @@ test_list_hs = [int(item.split()[1]) for item in test_list]
 test_list_hs = np.array(test_list_hs)
 idx = np.where(test_list_hs == 1) #total = 80152, hs = 6107
 
-def _merge_image(dir, savedir, txtfile, test=0, merge=0, id_low=0, id_high=21514):
-    with open(txtfile, 'w+') as f:
-        if test == 1:
-            for id in idx[0]:
-                if id < id_low:
-                    continue
-                if id >= id_high:
-                    break
-                f.write('./'+savedir+'/'+str(id)+'.png')
-                f.write('\n')
-                img2, _ = get_image_from_input_id(test_list, id)
-                cv2.imwrite(savedir+'/'+str(id)+'.png', img2)
-
-        if merge == 1:
-            print("merge mode")
-            for root, dirs, files in os.walk(dir):
-                for name in files:
-                    if ".png" in name:
-                        id = int(name[:-4])
-                        if id < id_low or id >= id_high:
-                            continue
-                        if test != 1:
-                            f.write('./'+savedir+'/'+str(id)+'.png')
-                            f.write('\n')
-                        img1 = cv2.imread(dir+'/'+str(id)+'.png', 0)
-                        cv2.imwrite(savedir+'/'+str(id)+'.png', img1)
-
-def _test_attack():
-    imgs = []
-    for i in attack_list:
-        imgs.append(cv2.imread(i[:-1], 0))
-    print("total images: "+str(len(imgs)))
-    fearr = feature_mp(np.array(imgs))
-    fearr = np.rollaxis(fearr, 1, 4)
-
-    input_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, blockdim, blockdim, fealen])
-    predict = forward(input_placeholder, is_training=False)
-    y      = tf.cast(tf.argmax(predict, 1), tf.int32)
-    accu   = tf.reduce_mean(tf.cast(y, tf.float32))
-
-    t_vars = tf.trainable_variables()
-    d_vars = [var for var in t_vars if 't_' in var.name]
-    m_vars = [var for var in t_vars if 'model' in var.name]
-
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.9
-
-    ckpt = tf.train.get_checkpoint_state(model_path)
-    if ckpt and ckpt.model_checkpoint_path:
-        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-
-    with tf.Session(config=config) as sess:
-        sess.run(tf.global_variables_initializer())
-        saver    = tf.train.Saver(m_vars)
-        saver.restore(sess, os.path.join(model_path, ckpt_name))
-
-        print('Hotspot Detection Accuracy is %f'%accu.eval(feed_dict={input_placeholder: fearr}))
-
-def test_attack(dir='dct/attack_128_100', savedir='dct/merged_128_100', txtfile='dct/attack.txt', test=0, merge=0, id_low=0, id_high=21514):
-    merge_image(dir=dir, savedir=savedir, txtfile=txtfile, test=test, merge=merge, id_low=id_low, id_high=id_high)
-    attack_list = open(attack_path).readlines()
-    _test_attack()
-
-def validate_attack():
-    img = cv2.imread("dct/tmp/img.png", 0)
-    aimg = cv2.imread("dct/tmp/aimg.png", 0)
-    cimg1 = cv2.imread("dct/tmp/12.png", 0)
-    cimg2 = cv2.imread("dct/tmp/28.png", 0)
-    cimg3 = cv2.imread("dct/tmp/59.png", 0)
-
-    v_input_merged = tf.placeholder(dtype=tf.float32, shape=[1, blockdim, blockdim, fealen])
-
-    v_predict = forward(v_input_merged,is_training=False)
-    v_nhs_pre, v_hs_pre = tf.split(v_predict, [1, 1], 1)
-    v_fwd = tf.subtract(v_hs_pre, v_nhs_pre)
-
-    # generate candidates
-    X = []
-    X.append(cimg1)
-    X.append(cimg2)
-    X.append(cimg3)
-    X = np.array(X)
-    # dct
-    input_images = []
-    fe = feature(img, blocksize, blockdim, fealen)
-    input_images.append(np.rollaxis(fe, 0, 3))
-    for item in X:
-        fe = feature(item, blocksize, blockdim, fealen)
-        input_images.append(np.rollaxis(fe, 0, 3))
-    input_images = np.asarray(input_images)
-
-    input_placeholder = tf.placeholder(dtype=tf.float32, shape=[4, blockdim, blockdim, fealen])
-    perturbation = tf.zeros(dtype=tf.float32, shape=[1, blockdim, blockdim, fealen])
-    for i in range(3):
-        perturbation += input_placeholder[i+1]
-    input_merged = input_placeholder[0]+perturbation
-
-    predict = forward(input_merged,is_training=False)
-    nhs_pre, hs_pre = tf.split(predict, [1, 1], 1)
-    fwd = tf.subtract(hs_pre, nhs_pre)
-
-    t_vars = tf.trainable_variables()
-    m_vars = [var for var in t_vars if 'model' in var.name]
-    d_vars = [var for var in t_vars if 't_' in var.name]
-
-    '''
-    Config and model
-    '''
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.9
-
-
-    ckpt = tf.train.get_checkpoint_state(model_path)
-    if ckpt and ckpt.model_checkpoint_path:
-        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-
-    with tf.Session(config=config) as sess:
-        sess.run(tf.global_variables_initializer())
-        saver    = tf.train.Saver(m_vars)
-        saver.restore(sess, os.path.join(model_path, ckpt_name))
-
-        v_input_images = []
-        fe = feature(aimg, blocksize, blockdim, fealen)
-        v_input_images.append(np.rollaxis(fe, 0, 3))
-        v_input_images = np.asarray(v_input_images)
-        v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
-
-        diff = fwd.eval(feed_dict={input_placeholder: input_images})
-
-        print("diff: ")
-        print(diff)
-        print("v_diff: ")
-        print(v_diff)
-
-#validate_attack()
-#exit()
-
-#test_attack(id_low=10731, id_high=10733)
-#exit()
 
 '''
 Start attack
 '''
 
-def attack(target_idx):
-    tf.reset_default_graph()
+def attack(target_idx, net, dct):
     # test misclassification
+    '''
     img, _ = get_image_from_input_id(test_list, target_idx)
     v_input_merged = tf.placeholder(dtype=tf.float32, shape=[1, blockdim, blockdim, fealen])
 
@@ -364,20 +225,30 @@ def attack(target_idx):
 
     t_vars = tf.trainable_variables()
     m_vars = [var for var in t_vars if 'model' in var.name]
-
     '''
-    Config and model
-    '''
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.9
-
-
-    ckpt = tf.train.get_checkpoint_state(model_path)
-    if ckpt and ckpt.model_checkpoint_path:
-        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-    else:
-        raise RuntimeError(model_path + ' is not existed!')
+    img, _ = get_image_from_input_id(test_list, target_idx)
+    cv2.imwrite('img.png', img)
+    v_input_images = []
+    with torch.no_grad():
+        fe = feature(img, blocksize, blockdim, fealen)  # CHW
+        ch = 1
+        print(fe.dtype)
+        print(fe[ch])
+        fe = fe.astype(np.int8)
+        print(fe[ch])
+        cv2.imwrite('fe.png', fe[ch])
+        fe2 = dct(torch.from_numpy(img).float().unsqueeze(0).cuda())
+        fe2 = fe2.cpu().to(torch.int8).numpy()
+        print(fe2[ch])
+        cv2.imwrite('fe2.png', fe2[ch])
+        fe = torch.from_numpy(fe).float().unsqueeze(dim=0).cuda()
+        out = net(fe)
+        pred = out.argmax(dim=1)
+        exit()
+        if pred.item() == 0:
+            print(f'Misclassification: ID={target_idx}')
+            return -1
+    return 0
 
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
@@ -530,18 +401,21 @@ def attack(target_idx):
         return 0
 
 
-success = 0
-total = 0
-# print(len(idx[0]), max(idx[0]), min(idx[0]))
-# exit()
-for id in idx[0]:
-    if id < 0:
-        continue
-    if id >= 21514:
-        exit()
+def main():
+    dct = DCT128x128('dct_filter.npy').cuda()
+    net = DlhsdNetAfterDCT(16, 32, aug=False).cuda()
+    ckpt_path = os.path.join(model_path, 'model-9999.pt')
+    net.load_state_dict(torch.load(ckpt_path))
+    success = 0
+    total = 0
+    for id in idx[0]:
+        assert id >= 0 and id < 21514, f'Invalid ID: {id}'
+        ret = attack(id, net, dct)
+        if ret != -1:
+            total += 1
+            success += ret
+        print(f'success attack: [{success:3d} / {total:3d}]')
 
-    ret = attack(id)
-    if ret != -1:
-        total += 1
-        success += ret
-    print("success attack: [ "+str(success)+" / "+str(total)+" ]")
+
+if __name__ == '__main__':
+    main()
