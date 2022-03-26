@@ -1,0 +1,15 @@
+name: env-pytorch1.7
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+dependencies:
+  - pytorch=1.7
+  - scipy
+  - opencv
+  - pandas
+  - tqdm
+  - torchvision
+  - pip:
+    - pillow==6.2.2
+prefix: env-pytorch1.7
