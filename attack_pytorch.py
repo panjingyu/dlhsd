@@ -106,8 +106,19 @@ def generate_candidates(test_file_list, id):
     '''
     print("Generating candidates...", end='')
     img, _ = get_image_from_input_id(test_file_list, id)
-    vias, srafs = _find_vias(_find_shapes(img))
-    add = _generate_sraf_add(img, vias, srafs, save_img=False)
+    img_path = test_file_list[id].split()[0]
+    img_dir = os.path.dirname(img_path)
+    img_shape_dir = os.path.join(img_dir, '_shapes')
+    img_name = os.path.basename(img_path)
+    img_shapes_path = os.path.join(img_shape_dir, img_name + '.npy')
+    if os.path.isfile(img_shapes_path):
+        shapes = np.load(img_shapes_path)
+    else:
+        shapes = _find_shapes(img)
+        os.makedirs(img_shape_dir, exist_ok=True)
+        np.save(img_shapes_path, shapes)
+    vias, srafs = _find_vias(shapes)
+    add = _generate_sraf_add(img, vias, srafs, save_img=False) # FIXME: slow!
     sub = _generate_sraf_sub(srafs, save_img=False)
     print(f'Done. Total candidates: {len(add)+len(sub)}')
     return np.concatenate((add, sub))
