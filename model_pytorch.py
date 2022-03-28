@@ -79,9 +79,11 @@ class DlhsdNetAfterDCT(nn.Module):
 
 
 class DCT128x128(nn.Module):
-    def __init__(self, filter_path) -> None:
+    def __init__(self, filter_path, div_255=False) -> None:
         super().__init__()
         w = np.expand_dims(np.load(filter_path), 1)
+        if div_255:
+            w /= 255
         # w = np.swapaxes(w, -1, -2)
         state = {'weight': torch.from_numpy(w).float()}
         self.kernel = nn.Conv2d(
@@ -244,13 +246,13 @@ def feature_torch(img, block_size, block_dim, fealen):
 
 
 if __name__ == '__main__':
-    def imwrite(filename, a):
-        import cv2
-        a = (a - a.min()) / (a.max() - a.min()) * 255
-        cv2.imwrite(filename, np.array(a))
-    imgraw = np.load('imgraw.npy')
-    arr = torch.from_numpy(imgraw)
-    a = dct2_torch(arr)
+    # def imwrite(filename, a):
+    #     import cv2
+    #     a = (a - a.min()) / (a.max() - a.min()) * 255
+    #     cv2.imwrite(filename, np.array(a))
+    # imgraw = np.load('imgraw.npy')
+    # arr = torch.from_numpy(imgraw)
+    # a = dct2_torch(arr)
     # mydct_conv = np.zeros((32, 128, 128), dtype=float)
     # m, n = 0, 0
     # c = 0
@@ -260,18 +262,20 @@ if __name__ == '__main__':
     # print('mydct_conv:')
     # print(mydct_conv[c])
     # np.save('mydct_conv.npy', mydct_conv)
-    dct_module = DCT128x128('mydct_conv.npy')
 
-    # from tqdm import trange
-    # for i in trange(128):
-    #     for j in range(128):
-    #         v = np.zeros((128,) * 2, dtype=np.uint8)
-    #         v[i, j] = 255
-    #         vv = feature_torch(v, 128, 1, 32)
-    #         dct_module.kernel.weight[:, 0, i, j] = vv.flatten()
-    # mydct_conv = dct_module.kernel.weight.detach().squeeze().numpy()
-    # np.save('mydct_conv.npy', mydct_conv)
-    b = dct_module(arr.unsqueeze(0).unsqueeze(0).float())
-    a = feature_torch(imgraw*255, 128, 1, 32)
-    print(b.flatten())
-    print(a.flatten())
+    def make_dct_conv():
+        from tqdm import trange
+        w = torch.zeros(32, 128, 128)
+        for i in trange(128):
+            for j in range(128):
+                v = np.zeros((128,) * 2, dtype=np.long)
+                v[i, j] = 255
+                vv = feature_torch(v, 128, 1, 32)
+                w[:, i, j] = vv.flatten()
+        np.save('mydct_conv.npy', w.numpy())
+    make_dct_conv()
+    # dct_module = DCT128x128('mydct_conv.npy')
+    # b = dct_module(arr.unsqueeze(0).unsqueeze(0).float())
+    # a = feature_torch(imgraw*255, 128, 1, 32)
+    # print(b.flatten())
+    # print(a.flatten())

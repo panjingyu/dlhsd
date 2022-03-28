@@ -7,7 +7,7 @@ import cv2
 
 import numpy as np
 import torch
-from model_pytorch import DlhsdNetAfterDCT, DCT128x128
+from model_pytorch import feature_torch, DlhsdNetAfterDCT, DCT128x128
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -76,7 +76,7 @@ bs = 512
 net = DlhsdNetAfterDCT(blockdim, fealen, aug=False).cuda()
 net.load_state_dict(torch.load(os.path.join(save_path, 'model-9999.pt')))
 net.eval()
-dct = DCT128x128('dct_filter.npy').cuda()
+dct = DCT128x128('mydct_conv.npy', div_255=True).cuda()
 dct.eval()
 
 
@@ -87,10 +87,11 @@ anhs= 0   #actual hs
 start   = time.time()
 with torch.no_grad():
     for titr in trange(len(test_list), desc='Detecting ID {}'.format(args.id)):
-        tdata = cv2.imread(test_list[titr].split()[0],0)/255
-        tdata = np.reshape(tdata, [1, 1, 2048, 2048])
+        tdata = cv2.imread(test_list[titr].split()[0],0)
         tdata = torch.from_numpy(tdata).float().cuda()
-        x_data = dct(tdata)
+        x_data = dct(tdata.reshape(1, 1, 2048, 2048))
+        # x_data1 = feature_torch(tdata.cpu().numpy(), 128, 16, 32)
+        # x_data1 = x_data1.unsqueeze(0).float().cuda()
         out = net(x_data)
         predict = out.argmax(dim=1, keepdim=True)
         chs += predict.item()
