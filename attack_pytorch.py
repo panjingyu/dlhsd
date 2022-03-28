@@ -11,6 +11,9 @@ from model_pytorch import DCT128x128, DlhsdNetAfterDCT
 debug = False
 
 
+torch.backends.cudnn.benchmark = True
+
+
 def get_image_from_input_id(test_file_list, id):
     '''
     return a image and its label
