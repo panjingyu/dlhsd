@@ -3,6 +3,7 @@ import numpy as np
 import configparser as cp
 import sys
 import os
+from tqdm import trange
 
 import torch
 
@@ -68,31 +69,40 @@ def _generate_sraf_add(img, vias, srafs, insert_shape=[40,90], save_img=False, s
     min_dis_to_vias = 100
     max_dis_to_vias = 500
     min_dis_to_sraf = 60
-    # black_img_ = cv2.imread("black.png", 0)
     img_size = 2048
-    black_img_ = np.zeros(shape=(img_size, img_size), dtype=np.uint8)
-    black_img = np.copy(black_img_)
-    # cv2.imwrite('black.png', black_img)
+
+    black_img = np.zeros(shape=(img_size, img_size), dtype=bool)
     for item in vias:
         center = [item[0]+int(item[2]/2), item[1]+int(item[3]/2)]
-        black_img[max(0, center[0]-max_dis_to_vias):min(black_img.shape[0], center[0]+max_dis_to_vias), max(0, center[1]-max_dis_to_vias):min(black_img.shape[1], center[1]+max_dis_to_vias)] = 255
+        black_img[max(0, center[0]-max_dis_to_vias):min(black_img.shape[0], center[0]+max_dis_to_vias),
+                  max(0, center[1]-max_dis_to_vias):min(black_img.shape[1], center[1]+max_dis_to_vias)]\
+                 = 1
     for item in vias:
         center = [item[0]+int(item[2]/2), item[1]+int(item[3]/2)]
-        black_img[max(0, center[0]-min_dis_to_vias):min(black_img.shape[0], center[0]+min_dis_to_vias), max(0, center[1]-min_dis_to_vias):min(black_img.shape[1], center[1]+min_dis_to_vias)] = 0
+        black_img[max(0, center[0]-min_dis_to_vias):min(black_img.shape[0], center[0]+min_dis_to_vias),
+                  max(0, center[1]-min_dis_to_vias):min(black_img.shape[1], center[1]+min_dis_to_vias)]\
+                 = 0
     for item in srafs:
-        black_img[max(0, item[0]-min_dis_to_sraf):min(black_img.shape[0], item[0]+item[2]+min_dis_to_sraf), max(0, item[1]-min_dis_to_sraf):min(black_img.shape[1], item[1]+item[3]+min_dis_to_sraf)] = 0
-    # iterate the space and add sraf one by one. srafs are generated randomly with width = 40 and length in range insert_shape
+        black_img[max(0, item[0]-min_dis_to_sraf):min(black_img.shape[0], item[0]+item[2]+min_dis_to_sraf),
+                  max(0, item[1]-min_dis_to_sraf):min(black_img.shape[1], item[1]+item[3]+min_dis_to_sraf)]\
+                 = 0
+
+    # iterate the space and add sraf one by one.
+    # srafs are generated randomly with width = 40 and length in range insert_shape
     for i in range(1, black_img.shape[0]-1):
         for j in range(1, black_img.shape[1]-1):
             if black_img[i][j] == 0:
                 continue
             shape = np.random.randint(insert_shape[0], high=insert_shape[1]+1, size=2)
             shape[np.random.randint(0,high=2)] = 40
-            if i+shape[0] <= black_img.shape[0] and j+shape[1] <= black_img.shape[1] and np.all(black_img[i:i+shape[0],j:j+shape[1]] == 255):
-                img = np.copy(black_img_)
+            if i+shape[0] <= black_img.shape[0] and j+shape[1] <= black_img.shape[1] and black_img[i:i+shape[0],j:j+shape[1]].all():
+                img = np.zeros((img_size, img_size), dtype=np.uint8)
                 img[i:i+shape[0],j:j+shape[1]] = 255
                 add.append(img)
-                black_img[max(0, i-min_dis_to_sraf):min(black_img.shape[0], i+shape[0]+min_dis_to_sraf), max(0, j-min_dis_to_sraf):min(black_img.shape[1], j+shape[1]+min_dis_to_sraf)] = 0
+                black_img[max(0, i-min_dis_to_sraf):min(black_img.shape[0], i+shape[0]+min_dis_to_sraf),
+                          max(0, j-min_dis_to_sraf):min(black_img.shape[1], j+shape[1]+min_dis_to_sraf)]\
+                         = 0
+
     if save_img:
         count = 1
         for item in add:
@@ -118,7 +128,7 @@ def generate_candidates(test_file_list, id):
         os.makedirs(img_shape_dir, exist_ok=True)
         np.save(img_shapes_path, shapes)
     vias, srafs = _find_vias(shapes)
-    add = _generate_sraf_add(img, vias, srafs, save_img=False) # FIXME: slow!
+    add = _generate_sraf_add(img, vias, srafs, save_img=False) # FIXME: slow! ~7 secs
     sub = _generate_sraf_sub(srafs, save_img=False)
     print(f'Done. Total candidates: {len(add)+len(sub)}')
     return np.concatenate((add, sub))
@@ -142,13 +152,6 @@ def load_candidates(sub_dir="generate_sraf_sub/", add_dir="generate_sraf_add/"):
                 X.append(img)
     print("Loading candidates done. Total candidates: "+str(len(X)))
     return np.array(X)
-
-def generate_adversarial_image(img, X, alpha):
-    img = img.astype(np.int32)
-    #X = np.absolute(X).astype(np.int32)
-    X = X.astype(np.int32)
-    alpha = alpha.astype(np.int32)
-    return (img+np.sum(X*np.expand_dims(alpha,-1),axis=0)).astype(np.uint8)
 
 def generate_adversarial_image_torch(img, X, idx):
     tmp = X[idx].sum(dim=0).view_as(img)
@@ -192,7 +195,7 @@ logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s:%(levelname)s:%(message)s',
         filename=log_file,
-        filemode='a'
+        filemode='w'
         )
 log = logging.getLogger('')
 sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
@@ -279,7 +282,6 @@ def attack(target_idx, net):
     else:
         max_candidates = X.shape[0]
     X = torch.from_numpy(X).cuda()
-    # TODO: fix follwoing
 
     alpha = torch.full((max_candidates,),
                        fill_value=1 / (1 + np.exp(-10)),
@@ -295,8 +297,7 @@ def attack(target_idx, net):
     interval = 10
 
     net.eval()
-    for iter in range(max_iter):
-        # opt.run(feed_dict={input_placeholder: input_images, t_X: X})
+    for iter in trange(max_iter, desc='Attack'):
         opt.zero_grad()
         perturbation = alpha.matmul(X.flatten(1))
         perturbation = perturbation.view_as(img_t)
