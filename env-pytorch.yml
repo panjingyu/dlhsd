@@ -5,7 +5,7 @@ channels:
   - pytorch
 dependencies:
   - opencv
-  - pytorch==1.11
+  - pytorch=1.11
   - torchvision
   - tqdm
   - pandas
