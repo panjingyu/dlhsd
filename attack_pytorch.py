@@ -6,7 +6,7 @@ import os
 
 import torch
 
-from model_pytorch import feature, DCT128x128, DlhsdNetAfterDCT
+from model_pytorch import DCT128x128, DlhsdNetAfterDCT
 debug = False
 
 
@@ -48,7 +48,8 @@ def _find_vias(shapes_):
 
 def _generate_sraf_sub(srafs, save_img=False, save_dir="generate_sraf_sub/"):
     sub = []
-    black_img_ = cv2.imread("black.png", 0)
+    # black_img_ = cv2.imread("black.png", 0)
+    black_img_ = np.zeros((2048, 2048), dtype=np.uint8)
     for item in srafs:
         black_img = np.copy(black_img_)
         black_img[item[0]:item[0]+item[2], item[1]:item[1]+item[3]] = -255
@@ -103,12 +104,12 @@ def generate_candidates(test_file_list, id):
     '''
     gengerate all candidates and save them
     '''
-    print("Generating candidates...")
+    print("Generating candidates...", end='')
     img, _ = get_image_from_input_id(test_file_list, id)
     vias, srafs = _find_vias(_find_shapes(img))
     add = _generate_sraf_add(img, vias, srafs, save_img=False)
     sub = _generate_sraf_sub(srafs, save_img=False)
-    print("Generating candidates done. Total candidates: "+str(len(add)+len(sub)))
+    print(f'Done. Total candidates: {len(add)+len(sub)}')
     return np.concatenate((add, sub))
 
 def load_candidates(sub_dir="generate_sraf_sub/", add_dir="generate_sraf_add/"):
@@ -137,6 +138,14 @@ def generate_adversarial_image(img, X, alpha):
     X = X.astype(np.int32)
     alpha = alpha.astype(np.int32)
     return (img+np.sum(X*np.expand_dims(alpha,-1),axis=0)).astype(np.uint8)
+
+def generate_adversarial_image_torch(img, X, idx):
+    tmp = X[idx].sum(dim=0).view_as(img)
+    img_t = img + tmp
+    if img_t.max() > 256:
+        print('Warning: SRAF overlapping detected!')
+        img_t.clip_(0, 255)
+    return img_t
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -176,7 +185,6 @@ logging.basicConfig(
         )
 log = logging.getLogger('')
 sys.stdout = StreamToLogger(log,logging.INFO, sys.stdout)
-sys.stderr = StreamToLogger(log,logging.ERROR, sys.stderr)
 
 
 '''
@@ -209,65 +217,48 @@ test_list_hs = np.array(test_list_hs)
 idx = np.where(test_list_hs == 1) #total = 80152, hs = 6107
 
 
+def attack_trial(alpha, X, img_t, net, target_idx):
+    a = alpha.detach()
+    idx = torch.zeros_like(a, dtype=torch.bool)
+    for i in range(max_perturbation):
+        max_idx = a.argmax()
+        idx[max_idx] = True
+        a[max_idx] = -float('inf')
+        perturbation = X[idx].sum(dim=0).view_as(img_t)
+        in_all = img_t + perturbation
+        out = net(in_all)
+        diff = out[:,1] - out[:,0]
+        if diff <= -0.01:
+            aimg = generate_adversarial_image_torch(img_t, X, idx)
+            print(aimg.size())
+            out = net(aimg)
+            pred = out.argmax(1).item()
+            if pred == 1:
+                print('False attack')
+                continue
+            cv2.imwrite(img_save_dir+str(target_idx)+'.png', aimg.cpu().squeeze().numpy())
+            print("ATTACK SUCCEED: sarfs add: "+str(len(idx)))
+            print("****************")
+            return 1
+    return 0
+
 '''
 Start attack
 '''
 
-def attack(target_idx, net, dct):
+def attack(target_idx, net):
     # test misclassification
-    '''
     img, _ = get_image_from_input_id(test_list, target_idx)
-    v_input_merged = tf.placeholder(dtype=tf.float32, shape=[1, blockdim, blockdim, fealen])
-
-    v_predict = forward(v_input_merged,is_training=False)
-    v_nhs_pre, v_hs_pre = tf.split(v_predict, [1, 1], 1)
-    v_fwd = tf.subtract(v_hs_pre, v_nhs_pre)
-
-    t_vars = tf.trainable_variables()
-    m_vars = [var for var in t_vars if 'model' in var.name]
-    '''
-    img, _ = get_image_from_input_id(test_list, target_idx)
-    cv2.imwrite('img.png', img)
-    v_input_images = []
+    net.eval()
     with torch.no_grad():
-        fe = feature(img, blocksize, blockdim, fealen)  # CHW
-        ch = 1
-        print(fe.dtype)
-        print(fe[ch])
-        fe = fe.astype(np.int8)
-        print(fe[ch])
-        cv2.imwrite('fe.png', fe[ch])
-        fe2 = dct(torch.from_numpy(img).float().unsqueeze(0).cuda())
-        fe2 = fe2.cpu().to(torch.int8).numpy()
-        print(fe2[ch])
-        cv2.imwrite('fe2.png', fe2[ch])
-        fe = torch.from_numpy(fe).float().unsqueeze(dim=0).cuda()
-        out = net(fe)
+        img_t = torch.from_numpy(img).float().view(1, 1, *img.shape).cuda()
+        out = net(img_t)
         pred = out.argmax(dim=1)
-        exit()
         if pred.item() == 0:
             print(f'Misclassification: ID={target_idx}')
             return -1
-    return 0
 
-    with tf.Session(config=config) as sess:
-        sess.run(tf.global_variables_initializer())
-        saver    = tf.train.Saver(m_vars)
-        saver.restore(sess, os.path.join(model_path, ckpt_name))
-
-        v_input_images = []
-        fe = feature(img, blocksize, blockdim, fealen)
-        v_input_images.append(np.rollaxis(fe, 0, 3))
-        v_input_images = np.asarray(v_input_images)
-        v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
-        if v_diff < -0.0:
-            print('misclassification: ' + str(target_idx))
-            # return -1
-            return 0
-        else:
-            return 1
-
-    print("start attacking on id: "+str(target_idx))
+    print(f'start attacking on id: {target_idx}')
     max_candidates = _max_candidates
     # generate candidates
     X = generate_candidates(test_list, target_idx)
@@ -276,141 +267,65 @@ def attack(target_idx, net, dct):
         X = X[:max_candidates]
     else:
         max_candidates = X.shape[0]
-    t_X = tf.placeholder(dtype=tf.float32, shape=[max_candidates, imgdim, imgdim])
+    X = torch.from_numpy(X).cuda()
+    # TODO: fix follwoing
 
-    alpha = -10.0 + np.zeros((max_candidates,1))
-    la = 100000.0
-    t_alpha = tf.sigmoid(tf.cast(tf.get_variable(name='t_alpha', initializer=alpha), tf.float32))
-    t_la = tf.cast(tf.Variable(la, name='t_la'), tf.float32)
+    alpha = torch.full((max_candidates,),
+                       fill_value=1 / (1 + np.exp(-10)),
+                       requires_grad=True,
+                       device='cuda')
+    la = torch.tensor(1e5, requires_grad=True, device='cuda')
 
-    # dct
-    input_images = []
-    fe = feature(img, blocksize, blockdim, fealen)
-    input_images.append(np.rollaxis(fe, 0, 3))
-    for item in X:
-        fe = feature(item, blocksize, blockdim, fealen)
-        input_images.append(np.rollaxis(fe, 0, 3))
-    input_images = np.asarray(input_images)
-
-    input_placeholder = tf.placeholder(dtype=tf.float32, shape=[max_candidates + 1, blockdim, blockdim, fealen])
-    perturbation = tf.zeros(dtype=tf.float32, shape=[1, blockdim, blockdim, fealen])
-    for i in range(max_candidates):
-        perturbation += t_alpha[i] * input_placeholder[i+1]
-    input_merged = input_placeholder[0]+perturbation
-
-    loss_1 = tf.norm(tf.reduce_sum(t_X * tf.reshape(t_alpha, [tf.shape(t_alpha)[0],1,1]), axis=0), 2)
-
-    predict = forward(input_merged,is_training=False)
-    nhs_pre, hs_pre = tf.split(predict, [1, 1], 1)
-    fwd = tf.subtract(hs_pre, nhs_pre)
-
-    loss = loss_1 + t_la * fwd
-
-    t_vars = tf.trainable_variables()
-    m_vars = [var for var in t_vars if 'model' in var.name]
-    d_vars = [var for var in t_vars if 't_' in var.name]
-    opt = tf.train.RMSPropOptimizer(lr).minimize(loss, var_list=d_vars)
+    opt = torch.optim.RMSprop([alpha, la], lr=lr)
 
     '''
     first attack method by minimizing L(alpha, lambda)
     '''
-    with tf.Session(config=config) as sess:
-        sess.run(tf.global_variables_initializer())
-        saver    = tf.train.Saver(m_vars)
-        saver.restore(sess, os.path.join(model_path, ckpt_name))
+    interval = 10
 
-        interval = 10
+    net.eval()
+    for iter in range(max_iter):
+        # opt.run(feed_dict={input_placeholder: input_images, t_X: X})
+        opt.zero_grad()
+        perturbation = alpha.matmul(X.flatten(1))
+        perturbation = perturbation.view_as(img_t)
+        loss_1 = perturbation.norm()
+        in_all = img_t + perturbation
+        out = net(in_all)
+        diff = out[:,1] - out[:,0]
+        loss = loss_1 + la * diff
+        loss.backward()
+        opt.step()
 
-        for iter in range(max_iter):
-            opt.run(feed_dict={input_placeholder: input_images, t_X: X})
+        if iter % interval == 0:
 
-            if iter % interval == 0:
-                a = t_alpha.eval()
-                diff = fwd.eval(feed_dict={input_placeholder: input_images, t_X: X})
-                if debug:
-                    print("****************")
-                    print("alpha:", a)
-                    print("lambda:", t_la.eval())
-                    print("fwd:", diff)
-                    print("loss_1:",
-                          loss_1.eval(feed_dict={
-                              input_placeholder: input_images,
-                              t_X: X}))
-                    print("loss:",
-                          loss.eval(feed_dict={input_placeholder: input_images, t_X: X}))
+            if diff < -0.0:
+                interval = 5
+                ret = attack_trial(alpha, X, img_t, net, target_idx)
+                if ret == 1:
+                    return 1
 
-                if diff < -0.0:
-                    interval = 5
-                    idx = []
-                    b = np.copy(a)
-                    for i in range(max_perturbation):
-                        idx.append(np.argmax(b))
-                        b = np.delete(b, idx[-1])
-                        c = np.zeros(a.shape)
-                        c[idx] = 1.0
-                        diff = fwd.eval(feed_dict={input_placeholder: input_images, t_X: X, t_alpha: c})
-                        if diff <= -0.01:
-                            aimg = generate_adversarial_image(img, X, c)
-                            v_input_images = []
-                            fe = feature(aimg, blocksize, blockdim, fealen)
-                            v_input_images.append(np.rollaxis(fe, 0, 3))
-                            v_input_images = np.asarray(v_input_images)
-                            v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
-                            #im = input_merged.eval(feed_dict={input_placeholder: input_images, t_X: X})
-                            #print("dis: ")
-                            #print(np.sum(im-v_input_images))
-                            if v_diff > 0:
-                                print("False attack")
-                                continue
-                            cv2.imwrite(img_save_dir+str(target_idx)+'.png', aimg)
-                            print("ATTACK SUCCEED: sarfs add: "+str(len(idx)))
-                            print("****************")
-                            return 1
+    print("max iteration reached")
+    ret = attack_trial(alpha, X, img_t, net, target_idx)
+    if ret == 1:
+        return 1
 
-        print("max iteration reached")
-        a = t_alpha.eval()
-        idx = []
-        b = np.copy(a)
-        for i in range(max_perturbation):
-            idx.append(np.argmax(b))
-            b = np.delete(b, idx[-1])
-            c = np.zeros(a.shape)
-            c[idx] = 1.0
-            diff = fwd.eval(feed_dict={input_placeholder: input_images, t_X: X, t_alpha: c})
-
-            if diff <= -0.01:
-                aimg = generate_adversarial_image(img, X, c)
-                v_input_images = []
-                fe = feature(aimg, blocksize, blockdim, fealen)
-                v_input_images.append(np.rollaxis(fe, 0, 3))
-                v_input_images = np.asarray(v_input_images)
-                v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
-                #im = input_merged.eval(feed_dict={input_placeholder: input_images, t_X: X})
-                #print("dis: ")
-                #print(np.sum(im-v_input_images))
-                if v_diff > 0:
-                    print("False attack")
-                    continue
-                cv2.imwrite(img_save_dir+str(target_idx)+'.png', aimg)
-                print("ATTACK SUCCEED: sarfs add: "+str(len(idx)))
-                print("****************")
-                return 1
-
-        print("ATTACK FAIL: sraf not enough")
-        print("****************")
-        return 0
+    print("ATTACK FAIL: sraf not enough")
+    print("****************")
+    return 0
 
 
 def main():
-    dct = DCT128x128('dct_filter.npy').cuda()
+    dct = DCT128x128('mydct_conv.npy', div_255=True).cuda()
     net = DlhsdNetAfterDCT(16, 32, aug=False).cuda()
     ckpt_path = os.path.join(model_path, 'model-9999.pt')
     net.load_state_dict(torch.load(ckpt_path))
+    dct_net = torch.nn.Sequential(dct, net)
     success = 0
     total = 0
     for id in idx[0]:
         assert id >= 0 and id < 21514, f'Invalid ID: {id}'
-        ret = attack(id, net, dct)
+        ret = attack(id, dct_net)
         if ret != -1:
             total += 1
             success += ret
