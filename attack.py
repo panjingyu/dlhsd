@@ -101,12 +101,12 @@ def generate_candidates(test_file_list, id):
     '''
     gengerate all candidates and save them
     '''
-    print("Generating candidates...")
+    print('Generating candidates...')
     img, _ = get_image_from_input_id(test_file_list, id)
     vias, srafs = _find_vias(_find_shapes(img))
     add = _generate_sraf_add(img, vias, srafs, save_img=False)
     sub = _generate_sraf_sub(srafs, save_img=False)
-    print("Generating candidates done. Total candidates: "+str(len(add)+len(sub)))
+    print(f'Done. Total candidates: {len(add)+len(sub)}')
     return np.concatenate((add, sub))
 
 def load_candidates(sub_dir="generate_sraf_sub/", add_dir="generate_sraf_add/"):
@@ -138,7 +138,7 @@ def generate_adversarial_image(img, X, alpha):
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', type=str, default='dct_config.ini')
+parser.add_argument('--config', type=str, default='config/dct_config.ini')
 parser.add_argument('--cure-l', type=str, default=None)
 parser.add_argument('--cure-h', type=str, default=None)
 parser.add_argument('--save-path', type=str, default=None)
@@ -156,7 +156,7 @@ if args.cure_l is not None and args.cure_h is not None:
 if args.save_path is not None:
     model_path = args.save_path
 else:
-    model_path = 'models/' + 'vias' + log_file[pre_len:] + '/'
+    model_path = 'models/' + 'vias/' + log_file[pre_len+1:] + '/'
 log_file += '.log'
 
 if args.log is not None:
@@ -391,10 +391,9 @@ def attack(target_idx):
         v_diff = v_fwd.eval(feed_dict={v_input_merged: v_input_images})
         if v_diff < -0.0:
             print('misclassification: ' + str(target_idx))
-            # return -1
-            return 0
-        else:
-            return 1
+            return -1
+        # else:
+        #     return 1
 
     print("start attacking on id: "+str(target_idx))
     max_candidates = _max_candidates
@@ -439,6 +438,8 @@ def attack(target_idx):
     m_vars = [var for var in t_vars if 'model' in var.name]
     d_vars = [var for var in t_vars if 't_' in var.name]
     opt = tf.train.RMSPropOptimizer(lr).minimize(loss, var_list=d_vars)
+    print(d_vars)
+    exit()
 
     '''
     first attack method by minimizing L(alpha, lambda)
