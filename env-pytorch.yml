@@ -1,0 +1,13 @@
+name: .env-pytorch
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+dependencies:
+  - opencv
+  - pytorch==1.11
+  - torchvision
+  - tqdm
+  - pandas
+  - scipy
+prefix: .env-pytorch
