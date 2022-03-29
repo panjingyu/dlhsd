@@ -235,25 +235,24 @@ idx = np.where(test_list_hs == 1) #total = 80152, hs = 6107
 
 
 def attack_trial(alpha, X, img_t, net, target_idx):
-    a = alpha.detach()
-    idx = torch.zeros_like(a, dtype=torch.bool)
-    for i in range(max_perturbation):
-        max_idx = a.argmax()
+    idx = torch.zeros_like(alpha, dtype=torch.bool)
+    for _ in range(max_perturbation):
+        max_idx = alpha.argmax()
         idx[max_idx] = True
-        a[max_idx] = -float('inf')
+        alpha[max_idx] = -float('inf')
         perturbation = X[idx].sum(dim=0).view_as(img_t)
         in_all = img_t + perturbation
         out = net(in_all)
         diff = out[:,1] - out[:,0]
         if diff <= -0.01:
             aimg = generate_adversarial_image_torch(img_t, X, idx)
-            print(aimg.size())
             out = net(aimg)
             pred = out.argmax(1).item()
             if pred == 1:
                 print('False attack')
                 continue
-            cv2.imwrite(img_save_dir+str(target_idx)+'.png', aimg.cpu().squeeze().numpy())
+            cv2.imwrite(os.path.join(img_save_dir, '{}.png'.format(target_idx)),
+                        aimg.cpu().squeeze().numpy())
             print("ATTACK SUCCEED: sarfs add: "+str(len(idx)))
             print("****************")
             return 1
@@ -316,12 +315,12 @@ def attack(target_idx, net):
 
             if diff < -0.0:
                 interval = 5
-                ret = attack_trial(alpha, X, img_t, net, target_idx)
+                ret = attack_trial(alpha.detach(), X, img_t, net, target_idx)
                 if ret == 1:
                     return 1
 
     print("max iteration reached")
-    ret = attack_trial(alpha, X, img_t, net, target_idx)
+    ret = attack_trial(alpha.detach(), X, img_t, net, target_idx)
     if ret == 1:
         return 1
 
@@ -345,6 +344,7 @@ def main():
             total += 1
             success += ret
         print(f'success attack: [{success:3d} / {total:3d}]')
+    print('All done.')
 
 
 if __name__ == '__main__':
