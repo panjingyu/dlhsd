@@ -2,10 +2,15 @@
 
 export CUDA_VISIBLE_DEVICES=1
 
-export args="--aug --cure-l 1 --cure-h 5e-1"
+# args="--aug --cure-l 1 --cure-h 1"
+args="--aug"
 
-python -u train_pytorch.py $args
+# python -u train_pytorch.py $args
+# for id in `seq 1 4`;
+# do
+#     python -u test_pytorch.py $args --id $id
+# done
 for id in `seq 1 4`;
 do
-    python -u test_pytorch.py $args --id $id
+    python -u attack_pytorch.py $args --id $id
 done
