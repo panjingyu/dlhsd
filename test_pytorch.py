@@ -5,9 +5,11 @@ import os
 from tqdm import trange
 import cv2
 
-import numpy as np
 import torch
-from model_pytorch import feature_torch, DlhsdNetAfterDCT, DCT128x128
+from model_pytorch import DlhsdNetAfterDCT, DCT128x128
+
+
+torch.backends.cudnn.benchmark = True
 
 import argparse
 parser = argparse.ArgumentParser()

@@ -15,6 +15,8 @@ from model_pytorch import DlhsdNetAfterDCT
 from cure import regularizer
 
 
+torch.backends.cudnn.benchmark = True
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, default='config/via_config.ini')
@@ -185,6 +187,7 @@ for step in range(maxitr):
     if step % l_step == 0:
         format_str = ('%s: step %d, loss = %.2f, learning_rate = %f, training_accu = %f, nhs_loss = %.2f, bias = %.3f, norm_grad = %.3f')
         print (format_str % (datetime.now(), step, training_loss, learning_rate, training_acc, nhs_loss, delta1, norm_grad))
+        tb_writer.flush()
     if step % c_step == 0 or step == maxitr-1:
         path = save_path + 'model-'+str(step)+'.pt'
         torch.save(net.state_dict(), path)

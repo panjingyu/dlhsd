@@ -185,6 +185,7 @@ if args.save_path is not None:
     model_path = args.save_path
 else:
     model_path = 'models/vias/' + log_file[pre_len+1:] + '/'
+log_file = os.path.join('log', log_file)
 log_file += '.log'
 
 if args.log is not None:
