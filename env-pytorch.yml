@@ -6,6 +6,7 @@ channels:
 dependencies:
   - opencv
   - pytorch=1.11
+  - tensorboard
   - torchvision
   - tqdm
   - pandas
