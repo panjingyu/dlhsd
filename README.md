@@ -30,7 +30,7 @@ e.g. to train iccad1 of dac17, you need to modify iccad1\_config.ini
 
 set ```save_path=./models/iccad1/bl/model.ckpt```
 
-set ```aug=0``` and 
+set ```aug=0``` and
 
 ```python train_dac.py iccad1_config.ini <gpu_id>```
 
