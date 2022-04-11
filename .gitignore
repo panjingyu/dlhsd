@@ -6,3 +6,7 @@ dct-40-90
 .env*/
 .vscode/
 *.pyc
+*.zip
+*.gds
+*.png
+
