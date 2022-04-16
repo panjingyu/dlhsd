@@ -21,3 +21,9 @@ class StreamToLogger(object):
     def flush(self):
         if self.tee is not None:
             self.tee.flush()
+
+def get_log_id(args, delim='.'):
+    log_id = []
+    if args.cure_l != 0. and args.cure_h != 0.:
+        log_id.append('cureL{:.1e}H{:.1e}'.format(args.cure_l, args.cure_h))
+    return delim.join(log_id)
