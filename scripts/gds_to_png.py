@@ -8,31 +8,8 @@ import cv2
 from skimage.draw import rectangle
 from tqdm import tqdm
 
+from utils.gds_reader import get_layout_location, shape_to_grid, gen_shapes
 
-def get_layout_location(layout):
-    co = np.array(layout).reshape(-1, 2)
-    x_min, y_min = np.min(co, axis=0)
-    x_max, y_max = np.max(co, axis=0)
-    return x_min, y_min, x_max, y_max
-
-def to_grid(co, offset, step):
-    return np.uint32(np.floor((co + offset) / step))
-
-def shape_to_grid(shape, x_offset, y_offset, step):
-    x1, y1, x2, y2 = get_layout_location(shape)
-    x1 = to_grid(x1, x_offset, step)
-    x2 = to_grid(x2, x_offset, step)
-    y1 = to_grid(y1, y_offset, step)
-    y2 = to_grid(y2, y_offset, step)
-    return x1, x2, y1, y2
-
-def gen_shapes(shapes, out_shape, x_offset, y_offset, step):
-    gen_img = np.zeros(out_shape, dtype=np.uint8)
-    for v in shapes:
-        x1, x2, y1, y2 = shape_to_grid(v, x_offset, y_offset, step)
-        rec = rectangle((y1, x1), end=(y2, x2))
-        gen_img[tuple(rec)] = 255
-    return gen_img
 
 def test():
     gds_dir = 'vias/via-merge/test'
