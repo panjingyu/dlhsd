@@ -61,11 +61,11 @@ def test():
 def main(args):
     LEN = 2048
     gds_files = sorted(os.listdir(args.gds_dir))
-    vias_dir = os.path.join(args.gds_dir, 'png-vias')
+    vias_dir = os.path.join(args.gds_dir, '../png-vias')
     os.makedirs(vias_dir, exist_ok=True)
-    srafs_dir = os.path.join(args.gds_dir, 'png-srafs')
+    srafs_dir = os.path.join(args.gds_dir, '../png-srafs')
     os.makedirs(srafs_dir, exist_ok=True)
-    merge_dir = os.path.join(args.gds_dir, 'png-merge')
+    merge_dir = os.path.join(args.gds_dir, '../png-merge')
     os.makedirs(merge_dir, exist_ok=True)
     for gds in tqdm(gds_files):
         gds_path = os.path.join(args.gds_dir, gds)
@@ -90,7 +90,7 @@ def main(args):
 if __name__ == '__main__':
     # test()
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gds-dir', type=str, default='vias/via-merge/train',
+    parser.add_argument('--gds-dir', type=str, default='./data/train/gds',
                         help='Directory to gds files')
     parser.add_argument('--step', type=float, default=1e-3,
                         help='GDS sampling step size (in microns)')
