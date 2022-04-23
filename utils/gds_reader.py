@@ -3,11 +3,22 @@ import numpy as np
 from skimage.draw import rectangle
 
 
-def get_srafs_vias_from_gds(gds_path):
+LEN = 2048
+STEP = 1e-3     # GDS sampling step size (in microns)
+TOP_KEY = 'TOP_new'
+SRAFS_KEY = (2, 0)
+VIAS_KEY = (0, 0)
+
+
+def get_gds_top_layers(gds_path):
     gdsii = gdspy.GdsLibrary(infile=gds_path)
-    layers = gdsii.cells['TOP_new'].get_polygons(by_spec=True)
-    srafs = layers[2, 0]
-    vias = layers[0, 0]
+    layers = gdsii.cells[TOP_KEY].get_polygons(by_spec=True)
+    return layers
+
+def get_srafs_vias_from_gds(gds_path):
+    layers = get_gds_top_layers(gds_path)
+    srafs = layers[SRAFS_KEY]
+    vias = layers[VIAS_KEY]
     return srafs, vias
 
 def get_layout_location(layout):
@@ -35,3 +46,11 @@ def gen_shapes(shapes, out_shape, x_offset, y_offset, step):
         gen_img[tuple(rec)] = 255
     return gen_img
 
+def gen_merge_img_from_gds(gds_path):
+    srafs, vias = get_srafs_vias_from_gds(gds_path)
+    x_min, y_min, x_max, y_max = get_layout_location(srafs)
+    x_offset = (LEN * STEP - x_max - x_min) / 2
+    y_offset = (LEN * STEP - y_max - y_min) / 2
+    img_vias = gen_shapes(vias, (LEN, LEN), x_offset, y_offset, STEP)
+    img_srafs = gen_shapes(srafs, (LEN, LEN), x_offset, y_offset, STEP)
+    return img_vias + img_srafs

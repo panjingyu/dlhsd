@@ -7,7 +7,7 @@ from tqdm import trange
 
 import torch
 
-from model import DCT128x128, DlhsdNetAfterDCT
+from utils.model import DCT128x128, DlhsdNetAfterDCT
 debug = False
 
 

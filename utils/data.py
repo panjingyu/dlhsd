@@ -3,8 +3,9 @@ import random
 import os
 import numpy as np
 import pandas as pd
+import torch
 from itertools import islice
-from tqdm import trange
+from tqdm import tqdm, trange
 
 
 def readcsv(target, fealen=32):
@@ -322,3 +323,53 @@ class Data:
             self.ptr=self.ptr+batch-self.maxlen
         #print np.asarray(temp_fea).shape
         return np.rollaxis(np.asarray(temp_fea), 0, 3)[:,:,0:channel], label
+
+
+class DataGds(Data):
+    def __init__(self, path, preload=True, shuffle_seed=42):
+        self.path = path
+        self.gds_files = sorted(f for f in os.listdir(os.path.join(path, 'gds'))
+                                if f.endswith('.gds'))
+        random.Random(shuffle_seed).shuffle(self.gds_files)
+        self.gds_files = self.gds_files[:35000]
+        self.n_samples = len(self.gds_files)
+        print(f'Found {self.n_samples} GDS files in {path}')
+        self.ptr_n=0
+        self.ptr_h=0
+        self.ptr=0
+        self.preload = preload
+        if preload:
+            merge_dct_dir = os.path.join(path, 'png-merge.dct')
+            assert os.path.isdir(merge_dct_dir)
+            # assert self.n_samples == len(os.listdir(merge_dct_dir))
+            print('Found pre-transformed DCT data')
+            dct, label = [], []
+            for gds in tqdm(self.gds_files, desc='Loading pt files'):
+                dct_path = os.path.join(merge_dct_dir, gds + '.pt')
+                t = torch.load(dct_path).detach().numpy()
+                dct.append(t)
+                label.append(gds.startswith('H'))
+            self.ft_buffer = np.stack(dct)
+            self.label_buffer = np.array(label, dtype=np.int32)
+        else:
+            raise NotImplementedError('Only support prealod as dct on init')
+
+
+if __name__ == '__main__':
+    archive_train = 'archive/benchmarks/vias/train/'
+    # NOTE: Data.ft_buffer.shape == (n_samples, blockdim * blockdim, fealen)
+    # NOTE: Data.label_buffer.shape == (n_samples, )
+    # train_data = Data(archive_train, archive_train + 'label.csv', preload=True)
+    # print(train_data.ft_buffer.shape)
+    # print(train_data.label_buffer.shape)
+    # mask = np.ones(len(train_data.label_buffer), dtype=bool)
+    # train_data.ft_buffer = train_data.ft_buffer[mask]
+    # train_data.label_buffer = train_data.label_buffer[mask]
+    # train_data.reset()
+    # train_data.stat()
+    data_gds = DataGds('data/train/')
+    mask = np.ones(len(data_gds.label_buffer), dtype=bool)
+    data_gds.ft_buffer = data_gds.ft_buffer[mask]
+    data_gds.label_buffer = data_gds.label_buffer[mask]
+    data_gds.reset()
+    data_gds.stat()
